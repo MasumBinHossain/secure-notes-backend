@@ -32,6 +32,70 @@ async function checkIndexes() {
 
     console.dir(usersExplain, { depth: null });
 
+
+    console.log("\n========== GROUP BY INTERESTS AGGREGATION ==========");
+
+    const interestsExplain = await User.aggregate([
+      {
+        $match: {
+          interests: { $gt: "" },
+        },
+      },
+      {
+        $unwind: "$interests",
+      },
+      {
+        $set: {
+          normalizedInterest: {
+            $toLower: {
+              $trim: {
+                input: "$interests",
+              },
+            },
+          },
+        },
+      },
+      {
+        $match: {
+          normalizedInterest: { $ne: "" },
+        },
+      },
+      {
+        $group: {
+          _id: "$normalizedInterest",
+          users: {
+            $addToSet: {
+              id: "$_id",
+              name: "$name",
+              email: "$email",
+            },
+          },
+        },
+      },
+      {
+        $set: {
+          totalUsers: { $size: "$users" },
+        },
+      },
+      {
+        $sort: { _id: 1 },
+      },
+      {
+        $facet: {
+          groups: [
+            { $skip: 0 },
+            { $limit: 10 },
+          ],
+          metadata: [
+            { $count: "total" },
+          ],
+        },
+      },
+    ]).explain("executionStats");
+
+    console.dir(interestsExplain, { depth: null });
+
+
     console.log("\n========== NOTES LIST ==========");
 
     const notesExplain = await Note.collection

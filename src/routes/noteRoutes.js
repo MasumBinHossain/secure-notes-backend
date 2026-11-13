@@ -81,10 +81,12 @@ router.get("/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid note ID" });
     }
 
-    const note = await Note.findOne({
-      _id: req.params.id,
-      user: req.user._id,
-    });
+    const filter =
+      req.user.role === "admin"
+        ? { _id: req.params.id }
+        : { _id: req.params.id, user: req.user._id };
+
+    const note = await Note.findOne(filter);
 
     if (!note) {
       return res.status(404).json({ message: "Note not found" });

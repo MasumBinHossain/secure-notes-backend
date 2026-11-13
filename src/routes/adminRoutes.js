@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const Note = require("../models/Note");
+const Post = require("../models/Post");
 const { protect, adminOnly } = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -17,44 +18,109 @@ router.use(protect, adminOnly);
 // GROUP USERS BY INTERESTS
 // GET /api/admin/users/grouped-by-interests
 
+
 router.get("/users/grouped-by-interests", async (req, res) => {
   try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
+    const skip = (page - 1) * limit;
+
     const result = await User.aggregate([
+      // Stage 1: Use the interests multikey index to find
+      // users having at least one non-empty string interest.
+      {
+        $match: {
+          interests: { $gt: "" },
+        },
+      },
+
+      // Stage 2: Convert each interest array into individual entries.
       {
         $unwind: "$interests",
       },
+
+      // Stage 3: Normalize each interest.
       {
-        $group: {
-          _id: {
+        $set: {
+          normalizedInterest: {
             $toLower: {
               $trim: {
                 input: "$interests",
               },
             },
           },
+        },
+      },
+
+      // Stage 4: Remove empty or whitespace-only interests.
+      {
+        $match: {
+          normalizedInterest: { $ne: "" },
+        },
+      },
+
+      // Stage 5: Group users by normalized interest.
+      {
+        $group: {
+          _id: "$normalizedInterest",
           users: {
-            $push: {
+            $addToSet: {
               id: "$_id",
               name: "$name",
               email: "$email",
             },
           },
-          totalUsers: { $sum: 1 },
         },
       },
+
+      // Stage 6: Count unique users in each group.
+      {
+        $set: {
+          totalUsers: { $size: "$users" },
+        },
+      },
+
+      // Stage 7: Sort groups alphabetically.
       {
         $sort: { _id: 1 },
       },
+
+      // Stage 8: Paginate groups and calculate total group count.
+      {
+        $facet: {
+          groups: [
+            { $skip: skip },
+            { $limit: limit },
+          ],
+          metadata: [
+            { $count: "total" },
+          ],
+        },
+      },
     ]);
+
+    const groups = result[0]?.groups || [];
+    const total = result[0]?.metadata?.[0]?.total || 0;
 
     res.json({
       message: "Users grouped by interests",
-      groups: result,
+      groups,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    console.error("Interest aggregation failed:", error.message);
+
+    res.status(500).json({
+      message: "Server error",
+    });
   }
 });
+
 
 
 
@@ -236,10 +302,13 @@ router.delete("/users/:id", async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Also delete the notes owned by this user
+    // Also delete the notes and posts owned by this user
     await Note.deleteMany({ user: user._id });
+    await Post.deleteMany({ user: user._id });
 
-    res.json({ message: "User and their notes deleted successfully" });
+    res.json({
+      message: "User, their notes, and their posts deleted successfully",
+    });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }

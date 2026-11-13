@@ -28,10 +28,22 @@ const userSchema = new mongoose.Schema(
       default: "user",
     },
 
+    
     interests: {
       type: [String],
       default: [],
+      set: (values) => {
+        if (!Array.isArray(values)) return [];
+
+        const normalized = values
+          .filter((value) => typeof value === "string")
+          .map((value) => value.trim().toLowerCase())
+          .filter(Boolean);
+
+        return [...new Set(normalized)];
+      },
     },
+
   },
   {
     timestamps: true,
@@ -41,5 +53,6 @@ const userSchema = new mongoose.Schema(
 // Explicit index definitions
 userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ createdAt: -1 });
+userSchema.index({ interests: 1 });
 
 module.exports = mongoose.model("User", userSchema);
