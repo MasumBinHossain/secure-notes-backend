@@ -3,8 +3,27 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { protect } = require("../middleware/authMiddleware");
 
 const router = express.Router();
+
+// GET /api/auth/me - Fetch currently logged-in user's profile
+router.get("/me", protect, async (req, res) => {
+  try {
+    res.json({
+      user: {
+        id: req.user._id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role,
+        interests: req.user.interests,
+      },
+    });
+  } catch (error) {
+    console.error("Profile fetch failed:", error.message);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 // POST /api/auth/register
 router.post("/register", async (req, res) => {
