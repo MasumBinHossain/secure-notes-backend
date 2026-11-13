@@ -16,6 +16,7 @@ router.use(protect, adminOnly);
 
 // GROUP USERS BY INTERESTS
 // GET /api/admin/users/grouped-by-interests
+
 router.get("/users/grouped-by-interests", async (req, res) => {
   try {
     const result = await User.aggregate([
@@ -24,7 +25,13 @@ router.get("/users/grouped-by-interests", async (req, res) => {
       },
       {
         $group: {
-          _id: "$interests",
+          _id: {
+            $toLower: {
+              $trim: {
+                input: "$interests",
+              },
+            },
+          },
           users: {
             $push: {
               id: "$_id",
@@ -48,6 +55,7 @@ router.get("/users/grouped-by-interests", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
 
 
 // GET ALL USERS (PAGINATED)
