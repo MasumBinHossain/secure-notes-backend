@@ -26,8 +26,10 @@ const postSchema = new mongoose.Schema(
   }
 );
 
-// Supports user-specific post retrieval and sorting
-postSchema.index({ user: 1 });
+// Supports user-specific post retrieval and newest-first sorting
+postSchema.index({ user: 1, createdAt: -1 });
+
+// Supports public posts listing by newest first
 postSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("Post", postSchema);

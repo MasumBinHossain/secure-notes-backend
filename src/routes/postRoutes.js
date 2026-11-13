@@ -73,11 +73,19 @@ router.get("/", async (req, res) => {
 
 // GET POSTS BY USER USING ONE AGGREGATION PIPELINE
 // GET /api/posts/user/:userId
+
+
 router.get("/user/:userId", async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.userId)) {
-      return res.status(400).json({ message: "Invalid user ID" });
+      return res.status(400).json({
+        message: "Invalid user ID",
+      });
     }
+
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
+    const skip = (page - 1) * limit;
 
     const userId = new mongoose.Types.ObjectId(req.params.userId);
 
@@ -90,25 +98,78 @@ router.get("/user/:userId", async (req, res) => {
           from: "posts",
           localField: "_id",
           foreignField: "user",
-          as: "posts",
+          pipeline: [
+            {
+              $sort: { createdAt: -1 },
+            },
+            {
+              $facet: {
+                posts: [
+                  { $skip: skip },
+                  { $limit: limit },
+                ],
+                metadata: [
+                  { $count: "total" },
+                ],
+              },
+            },
+          ],
+          as: "postData",
+        },
+      },
+      {
+        $unwind: "$postData",
+      },
+      {
+        $project: {
+          name: 1,
+          posts: "$postData.posts",
+          total: {
+            $ifNull: [
+              { $arrayElemAt: ["$postData.metadata.total", 0] },
+              0,
+            ],
+          },
+        },
+      },
+      {
+        $addFields: {
+          pagination: {
+            total: "$total",
+            page: { $literal: page },
+            limit: { $literal: limit },
+            totalPages: {
+              $ceil: {
+                $divide: ["$total", { $literal: limit }],
+              },
+            },
+          },
         },
       },
       {
         $project: {
           name: 1,
           posts: 1,
+          pagination: 1,
         },
       },
     ]);
 
     if (result.length === 0) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({
+        message: "User not found",
+      });
     }
 
     res.json(result[0]);
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    console.error("User posts aggregation failed:", error.message);
+    res.status(500).json({
+      message: "Server error",
+    });
   }
 });
+
+
 
 module.exports = router;
